@@ -2,13 +2,14 @@
 
 Coffee Zone es una red social para desarrolladores y estudiantes de programación, con inspiración visual en X/Twitter y LinkedIn.
 
-Esta rama (`backend`) prepara exclusivamente la estructura y las convenciones. No hay servidor HTTP activo, conexión a MongoDB, endpoints, schemas, autenticación ni lógica de negocio. Los ejemplos de funcionalidades de este documento son futuros.
+Esta rama (`backend`) incluye la estructura, las convenciones y un servidor Express mínimo con `GET /api/health`. No hay conexión a MongoDB, schemas, autenticación ni lógica de negocio. Los ejemplos de funcionalidades de este documento son futuros.
 
 ## Stack y entorno común
 
 - Node.js 24.x y npm, también utilizados en frontend.
-- Express.js para la futura API HTTP.
-- MongoDB y Mongoose para persistencia y ODM.
+- Express.js para HTTP, CORS abierto para desarrollo y `express.json()` para recibir JSON.
+- dotenv para cargar `.env` y nodemon para reiniciar el servidor durante el desarrollo.
+- MongoDB y Mongoose previstos para persistencia y ODM; Mongoose ya está declarado, pero todavía no se utiliza.
 - JWT y bcrypt previstos para autenticación; todavía no se instalan ni implementan.
 - JavaScript con módulos ES (`import` / `export`), dos espacios de indentación, comillas simples y punto y coma.
 
@@ -55,9 +56,9 @@ Route → Middleware → Controller → Service → Model → MongoDB
 | `config/` | Configuración general y futura conexión a MongoDB. |
 | `utils/` | Funciones auxiliares reutilizables, con una responsabilidad clara. |
 | `app.js` | Configurar Express, middlewares generales y registro de rutas. No iniciar el servidor. |
-| `server.js` | Inicializar el servidor, validar configuración, conectar la base de datos y ejecutar `app.listen`. |
+| `server.js` | Cargar dotenv, leer `PORT` e iniciar el servidor con `app.listen`. La conexión a MongoDB se implementará en otra tarjeta. |
 
-El flujo representa el camino habitual; el middleware de errores se registrará después de las rutas para recibir los errores propagados. Actualmente `app.js` y `server.js` contienen solo comentarios de responsabilidad.
+El flujo representa el camino habitual de las funcionalidades futuras; el middleware de errores se registrará después de las rutas. Por ahora, el health check temporal está definido directamente en `app.js` y solo confirma que el servidor HTTP responde; no comprueba una base de datos.
 
 ## Convenciones de nombres y código
 
@@ -113,23 +114,23 @@ Usar códigos HTTP de error apropiados y mensajes seguros; no enviar credenciale
 
 ## Variables de entorno
 
-Copiar `.env.example` a `.env` dentro de `backend/` y completar los valores localmente cuando se implemente el servidor:
+Copiar `.env.example` a `.env` dentro de `backend/`. Solo `PORT` se utiliza actualmente; las otras variables quedan reservadas para futuras tarjetas:
 
 ```dotenv
-PORT=
+PORT=3000
 MONGODB_URI=
 JWT_SECRET=
 ```
 
-| Variable | Uso futuro |
+| Variable | Uso |
 | --- | --- |
-| `PORT` | Puerto HTTP. Para desarrollo local se acuerda `3000`, consistente con `VITE_API_URL` del frontend. |
+| `PORT` | Puerto HTTP. Usa `3000` como valor por defecto si no está definido o está vacío, consistente con `VITE_API_URL` del frontend. |
 | `MONGODB_URI` | URI de conexión a MongoDB. |
 | `JWT_SECRET` | Secreto privado para la autenticación futura; completar al implementar JWT. |
 
-Nunca subir `.env`, variantes locales ni credenciales. `.gitignore` permite versionar únicamente `.env.example` entre estos archivos. Mantener el ejemplo actualizado y sin valores sensibles. Los scripts usan la carga de entorno integrada de Node.js; no hace falta agregar `dotenv`.
+Nunca subir `.env`, variantes locales ni credenciales. `.gitignore` permite versionar únicamente `.env.example` entre estos archivos. Mantener el ejemplo actualizado y sin valores sensibles. `server.js` carga `.env` mediante dotenv.
 
-## Preparación y ejecución futura
+## Instalación y ejecución
 
 Desde la raíz del checkout de la rama `backend`:
 
@@ -140,19 +141,32 @@ npm ci
 
 Crear `.env` copiando `.env.example` (en PowerShell: `Copy-Item .env.example .env`).
 
-Cuando estén implementados `app.js`, la conexión de `config/` y `server.js`, completar las variables necesarias y usar:
+Iniciar el servidor en desarrollo:
 
 ```sh
 npm run dev
 ```
 
-El script de desarrollo usa el modo watch de Node.js. Para iniciar sin watch:
+El script de desarrollo usa nodemon para reiniciar ante cambios. Para iniciar sin nodemon:
 
 ```sh
 npm start
 ```
 
-**Estado actual:** los scripts están preparados, pero no levantan un servidor. `npm start` termina sin iniciar ningún servicio porque `server.js` solo contiene comentarios. No hay API para probar ni se requiere una base de datos en esta etapa.
+Ambos comandos muestran `Coffee Zone API running on port 3000` con la configuración local. No se necesita MongoDB. Detener el proceso con `Ctrl+C` antes de ejecutar el otro comando en el mismo puerto.
+
+Probar `GET http://localhost:3000/api/health` en el navegador o con `curl.exe http://localhost:3000/api/health` en PowerShell. Responde con HTTP `200` y:
+
+```json
+{
+  "data": {
+    "status": "ok",
+    "message": "Coffee Zone API is running"
+  }
+}
+```
+
+CORS permite cualquier origen durante el desarrollo; la restricción de orígenes se definirá al preparar el despliegue.
 
 ## Cómo agregar una nueva funcionalidad
 

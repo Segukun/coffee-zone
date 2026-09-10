@@ -1,2 +1,18 @@
-// Future responsibility: configure Express, shared middleware, and /api routes.
-// Export the configured app here; server startup belongs in server.js.
+import express from 'express';
+import cors from 'cors';
+
+const app = express();
+
+app.use(cors());
+app.use(express.json());
+
+app.get('/api/health', (request, response) => {
+  response.status(200).json({
+    data: {
+      status: 'ok',
+      message: 'Coffee Zone API is running',
+    },
+  });
+});
+
+export default app;
