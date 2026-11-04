@@ -1,6 +1,6 @@
 # Coffee Zone — Frontend
 
-Base de React + Vite para que Juliana implemente las pantallas del MVP. Incluye navegación, layouts y componentes visuales compartidos. Las páginas muestran placeholders explícitos; no hay formularios, autenticación, feed ni integración HTTP. Se puede ejecutar sin backend.
+Frontend de React + Vite para las pantallas del MVP. Incluye navegación, layouts, componentes visuales compartidos y formularios de login y registro con validación local. Las páginas sociales conservan placeholders explícitos; todavía no hay autenticación real, feed ni integración HTTP. Se puede ejecutar sin backend.
 
 ## Tecnologías y requisitos
 
@@ -69,7 +69,7 @@ frontend/
 │   │   │   ├── PageHeader.jsx
 │   │   │   ├── RightSidebar.jsx
 │   │   │   └── Sidebar.jsx
-│   │   ├── auth/                  # Reservado para formularios
+│   │   ├── auth/                  # AuthField, LoginForm y RegisterForm
 │   │   ├── posts/                 # Reservado para publicaciones
 │   │   ├── profile/               # Reservado para perfil
 │   │   └── comments/              # Reservado para comentarios
@@ -106,7 +106,7 @@ frontend/
 └── README.md
 ~~~
 
-public/ contiene archivos servidos sin importarlos. context/ queda reservado para estado compartido cuando sea necesario, sin sesión simulada. hooks/ y utils/ quedan reservados para hooks y funciones auxiliares reutilizables. Solo las carpetas reservadas conservan .gitkeep; se quitaron los marcadores de las carpetas que ahora contienen código.
+public/ contiene archivos servidos sin importarlos. context/ queda reservado para estado compartido cuando sea necesario, sin sesión simulada. hooks/ queda reservado para hooks reutilizables. utils/authValidation.js contiene las validaciones locales de login y registro.
 
 ## Components, pages y layouts
 
@@ -127,7 +127,11 @@ App.jsx monta BrowserRouter; routes/AppRouter.jsx define el árbol de rutas. No 
 
 Sidebar usa NavLink, que aplica el estilo activo y aria-current="page". El espacio inferior del usuario está reservado y no representa una sesión. RightSidebar contiene búsqueda deshabilitada, desarrolladores con Follow deshabilitado y tendencias estáticas tomadas del diseño. No se simulan acciones exitosas.
 
-AuthLayout ofrece encabezado, navegación Login/Sign Up, contenido central y pie. El formulario de cada página queda pendiente.
+AuthLayout ofrece encabezado, enlace a la otra pantalla de acceso, contenido central y pie. LoginPage y RegisterPage componen los formularios de components/auth/. AuthField comparte etiquetas, errores accesibles y controles independientes para mostrar u ocultar contraseñas.
+
+Los formularios validan campos obligatorios y formato de email; registro también valida username sin @ (letras, números y guiones bajos), nombre no vacío, contraseña de al menos ocho caracteres con una letra y un número, y confirmación coincidente. Estas reglas de interfaz deben acordarse con backend antes de integrar la API; no reemplazan su validación.
+
+Al enviar datos válidos se informa que la conexión al backend está pendiente: no se crea una cuenta, no se inicia sesión ni se guardan contraseñas o tokens. Remember me y Forgot password? permanecen deshabilitados. Los textos legales no son enlaces, porque todavía no existen páginas legales.
 
 ## Diseño y responsive
 
@@ -217,8 +221,10 @@ El contrato previsto devuelve { data: ... } en éxito y { error: { message: ... 
 - Instalación, inicio de Vite, lint y build verificados.
 - Las cinco rutas se comprueban mediante respuesta HTTP y renderizado React con el router en memoria: layouts correctos, enlaces de navegación y estado activo.
 - El frontend renderiza sin backend y no implementa solicitudes HTTP.
-- La revisión visual interactiva quedó pendiente: la herramienta de control del navegador no pudo determinar la URL de Opera con suficiente certeza y detuvo el acceso. El renderizado por código no sustituye esa revisión.
+- Login y registro se probaron en el navegador integrado con campos vacíos, datos inválidos y válidos, confirmación de contraseña, controles de visibilidad y navegación entre pantallas. También se ejecutaron 14 comprobaciones de validación local.
+- Se verificó el renderizado y la ausencia de overflow horizontal de ambos formularios en 1440, 1024, 768, 600, 390 y 320 px mediante iframes del navegador.
+- La comparación visual con capturas y la revisión manual con teclado quedan pendientes: el navegador integrado estaba oculto y no permitió obtener capturas. Las comprobaciones del DOM no sustituyen esa revisión.
 - Comprobar manualmente las cinco rutas, navegación con clic y teclado, atrás/adelante, recarga y ausencia de scroll horizontal en 1440, 1024, 768, 600, 390 y 320 px.
 - Tras aplicar las actualizaciones compatibles, npm audit sigue informando cuatro alertas moderadas de desarrollo en la cadena ESLint/minimatch. No se incluyen en el bundle de producción; no se aplicó el downgrade de ESLint que propone --force.
 
-Juliana puede comenzar reemplazando los placeholders de pages/, agregando los formularios en components/auth/ y construyendo los componentes de cada dominio. Feed, publicaciones, likes, comentarios, perfil, modal de edición, Settings, sesión e integración REST pertenecen a sus próximas tareas.
+Los formularios de login y registro ya están implementados como interfaz. El próximo paso de autenticación es acordar el contrato con backend e integrar servicios HTTP, manejo de carga y errores, y sesión real. Feed, publicaciones, likes, comentarios, perfil, modal de edición y Settings siguen pendientes.
