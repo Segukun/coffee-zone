@@ -1,162 +1,224 @@
 # Coffee Zone — Frontend
 
-Coffee Zone es una red social para desarrolladores y estudiantes de programación, con inspiración visual en X/Twitter y LinkedIn.
+Base de React + Vite para que Juliana implemente las pantallas del MVP. Incluye navegación, layouts y componentes visuales compartidos. Las páginas muestran placeholders explícitos; no hay formularios, autenticación, feed ni integración HTTP. Se puede ejecutar sin backend.
 
-Esta rama (`frontend`) prepara exclusivamente la estructura y las convenciones. React y Vite tienen un arranque mínimo: `App` devuelve `null`, por lo que la pantalla está vacía intencionalmente. No hay páginas, componentes de producto, autenticación, llamadas HTTP ni lógica de negocio. Todos los ejemplos de funcionalidades son futuros.
+## Tecnologías y requisitos
 
-## Stack y entorno común
+- Node.js **24.x** y npm.
+- React y React DOM 19, JavaScript/JSX y módulos ES.
+- Vite 8 con su plugin de React.
+- React Router DOM 7 en modo declarativo.
+- ESLint 10, reglas recomendadas de JavaScript, React Hooks y React Refresh.
+- CSS propio, sin librerías de UI, iconos, estado o cliente HTTP.
 
-- Node.js 24.x y npm para herramientas, también utilizados en backend.
-- React y React DOM para la interfaz.
-- Vite y su plugin de React para desarrollo y compilación.
-- JavaScript con módulos ES (`import` / `export`), dos espacios de indentación, comillas simples y punto y coma; comillas dobles en atributos JSX.
+package.json declara las dependencias y package-lock.json fija las versiones resueltas. Los iconos compartidos son SVG locales.
 
-`package.json` define las dependencias base y `package-lock.json` fija sus versiones para instalaciones reproducibles. Todavía no se agrega una biblioteca de rutas, de estado global ni de HTTP.
+## Instalación y ejecución
+
+Trabajar sobre la rama **frontend**. Desde la raíz del repositorio:
+
+~~~sh
+cd frontend
+npm install
+~~~
+
+Para instalaciones reproducibles con el lockfile, usar npm ci. Copiar .env.example a .env (PowerShell: Copy-Item .env.example .env) y ejecutar:
+
+~~~sh
+npm run dev
+~~~
+
+Abrir la URL que indique Vite. No hace falta iniciar Express ni MongoDB.
+
+~~~sh
+npm run lint
+npm run build
+npm run preview
+~~~
+
+lint revisa JS/JSX sin permitir advertencias. build genera dist/; preview sirve esa compilación para revisión local. node_modules/ y dist/ están ignorados.
+
+Al publicar esta SPA, el hosting deberá devolver index.html para las rutas del frontend (/profile, /login, etc.). Esto permite abrirlas directamente o recargarlas con BrowserRouter.
+
+## Variables de entorno
+
+~~~dotenv
+VITE_API_URL=http://localhost:3000/api
+~~~
+
+src/services/api.js exporta **apiBaseUrl**, lee import.meta.env.VITE_API_URL, usa ese valor local por defecto y quita las barras finales. Todavía no envía solicitudes HTTP.
+
+Reiniciar Vite al cambiar .env. Las variables VITE_* son públicas en el navegador: no incluir secretos, JWT privados ni credenciales de MongoDB. .env y sus variantes están ignorados; .env.example sí se versiona.
 
 ## Estructura
 
-```text
+~~~text
 frontend/
+├── public/
 ├── src/
 │   ├── assets/
+│   │   ├── images/                # Los tres logos originales
+│   │   └── icons/                 # Reservado para recursos de iconos
 │   ├── components/
 │   │   ├── common/
+│   │   │   ├── Avatar.jsx
+│   │   │   ├── BrandLogo.jsx
+│   │   │   ├── Icon.jsx
+│   │   │   └── PagePlaceholder.jsx
 │   │   ├── layout/
-│   │   ├── posts/
-│   │   └── comments/
+│   │   │   ├── PageHeader.jsx
+│   │   │   ├── RightSidebar.jsx
+│   │   │   └── Sidebar.jsx
+│   │   ├── auth/                  # Reservado para formularios
+│   │   ├── posts/                 # Reservado para publicaciones
+│   │   ├── profile/               # Reservado para perfil
+│   │   └── comments/              # Reservado para comentarios
+│   ├── layouts/
+│   │   ├── AppLayout.jsx
+│   │   └── AuthLayout.jsx
 │   ├── pages/
+│   │   ├── HomePage.jsx
+│   │   ├── ProfilePage.jsx
+│   │   ├── SettingsPage.jsx
+│   │   ├── LoginPage.jsx
+│   │   ├── RegisterPage.jsx
+│   │   └── NotFoundPage.jsx
+│   ├── routes/
+│   │   └── AppRouter.jsx
 │   ├── services/
+│   │   └── api.js
 │   ├── context/
 │   ├── hooks/
-│   ├── routes/
 │   ├── utils/
+│   ├── styles/
+│   │   ├── variables.css
+│   │   ├── global.css
+│   │   └── layout.css
 │   ├── App.jsx
 │   └── main.jsx
 ├── .env.example
 ├── .gitignore
+├── eslint.config.js
 ├── index.html
 ├── package.json
 ├── package-lock.json
 ├── vite.config.js
 └── README.md
-```
+~~~
 
-Las carpetas vacías tienen un `.gitkeep` para que Git las conserve. Eliminarlo cuando se agregue el primer archivo real a esa carpeta. `index.html` y `vite.config.js` son únicamente archivos de arranque de Vite.
+public/ contiene archivos servidos sin importarlos. context/ queda reservado para estado compartido cuando sea necesario, sin sesión simulada. hooks/ y utils/ quedan reservados para hooks y funciones auxiliares reutilizables. Solo las carpetas reservadas conservan .gitkeep; se quitaron los marcadores de las carpetas que ahora contienen código.
 
-## Responsabilidades
+## Components, pages y layouts
 
-| Ubicación | Responsabilidad y ejemplos futuros |
-| --- | --- |
-| `assets/` | Recursos estáticos importados por la aplicación, como imágenes e iconos. |
-| `components/` | Componentes reutilizables, agrupados por responsabilidad. |
-| `components/common/` | Componentes genéricos: `Avatar`, `Button`, `Modal`. |
-| `components/layout/` | Estructura general de la aplicación: `Sidebar`, `Navbar`. |
-| `components/posts/` | Componentes de publicaciones: `PostCard`, `CreatePost`. |
-| `components/comments/` | Componentes de comentarios: `Comment`. |
-| `pages/` | Pantallas completas: `HomePage.jsx`, `LoginPage.jsx`, `RegisterPage.jsx`, `ProfilePage.jsx`. |
-| `services/` | Toda comunicación HTTP con el backend: `api.js`, `authService.js`, `postService.js`, `userService.js`. |
-| `context/` | Estado global solo cuando sea necesario, por ejemplo `AuthContext.jsx`. |
-| `hooks/` | Custom hooks reutilizables; nombres con prefijo `use`, como `usePosts.js`. |
-| `routes/` | Configuración futura de navegación y rutas de React. |
-| `utils/` | Funciones auxiliares reutilizables, independientes de la UI. |
-| `App.jsx` | Composición futura de páginas, rutas y providers. Hoy es un componente vacío. |
-| `main.jsx` | Punto de entrada que monta React en el elemento raíz de `index.html`. |
+- **Components:** piezas reutilizables. common/ contiene elementos generales y layout/ contiene navegación, encabezado y descubrimiento. Las carpetas por dominio se completarán con sus futuras funcionalidades.
+- **Pages:** contenido de una ruta. Cada página arma su pantalla usando componentes; los placeholders actuales se reemplazan aquí.
+- **Layouts:** estructura compartida que permanece entre páginas. Ambos layouts usan Outlet para insertar la página correspondiente.
 
-## Convenciones de nombres y código
+App.jsx monta BrowserRouter; routes/AppRouter.jsx define el árbol de rutas. No hay rutas privadas ni redirecciones basadas en sesión.
 
-- Carpetas, archivos, funciones, variables y código en inglés; documentación en español.
-- Componentes y sus archivos en `PascalCase`: `PostCard.jsx`, `CreatePost.jsx`, `UserProfile.jsx`.
-- Páginas con sufijo `Page`: `HomePage.jsx`, `ProfilePage.jsx`.
-- Services en `camelCase` con sufijo `Service`: `authService.js`, `postService.js`. `api.js` será el módulo compartido de transporte HTTP.
-- Variables y funciones en `camelCase`: `createPost`, `handleSubmit`, `currentUser`, `isLoading`.
-- `.jsx` para archivos con JSX; `.js` para services, hooks sin JSX y utilidades.
-- Cada componente debe tener una responsabilidad clara. Separar UI, acceso a API, estado y lógica reutilizable.
-- Mantener estado local por defecto; usar context solo cuando sea necesario compartirlo. Evitar archivos gigantes y abstracciones que no necesita el MVP.
+| Ruta | Página | Layout |
+| --- | --- | --- |
+| / | HomePage | AppLayout |
+| /profile | ProfilePage | AppLayout |
+| /settings | SettingsPage | AppLayout |
+| /login | LoginPage | AuthLayout |
+| /register | RegisterPage | AuthLayout |
+| Otras | NotFoundPage | AppLayout |
 
-## Comunicación con el backend
+Sidebar usa NavLink, que aplica el estilo activo y aria-current="page". El espacio inferior del usuario está reservado y no representa una sesión. RightSidebar contiene búsqueda deshabilitada, desarrolladores con Follow deshabilitado y tendencias estáticas tomadas del diseño. No se simulan acciones exitosas.
 
-Toda comunicación HTTP se centralizará en `services/`. Los componentes, páginas y hooks invocarán funciones de esos services; no usarán `fetch` directamente ni repetirán URLs como `http://localhost:3000/api/posts`.
+AuthLayout ofrece encabezado, navegación Login/Sign Up, contenido central y pie. El formulario de cada página queda pendiente.
+
+## Diseño y responsive
+
+La referencia principal son las seis capturas del Figma.docx suministrado. Se conservan fondo casi negro, bordes sutiles y paleta oficial:
+
+- #2E073F: Dark Purple.
+- #7A1CAC: Primary Purple.
+- #AD49E1: Accent Purple.
+- #EBD3F8: Light Purple.
+
+styles/variables.css centraliza colores, tipografía, espaciado y dimensiones. El tema oscuro es el predeterminado, sin depender de las preferencias del sistema. Las variables de modo claro están preparadas en :root[data-theme='light']; no hay selector de tema, persistencia ni lógica de Settings.
+
+BrandLogo usa el horizontal dark para el fondo oscuro, prepara la variante light y usa el símbolo original en espacios compactos. Los archivos se copiaron sin modificar su contenido. El original LogoHorizontalLigthmode.webp tiene un error de escritura en el nombre: solo su copia interna se llama LogoHorizontalLightmode.webp.
+
+- Desde 1200 px: tres columnas, ancho máximo de 1440 px.
+- De 1024 a 1199 px: tres columnas con anchos y espacios reducidos.
+- De 768 a 1023 px: sidebar y contenido; se oculta la columna derecha.
+- De 600 a 767 px: navegación lateral compacta con iconos y etiquetas.
+- Hasta 599 px: contenido central, logo superior y navegación inferior fija con las tres rutas. Se reserva espacio inferior para que no tape el contenido.
+
+Se incluyen nombres accesibles, títulos jerárquicos, foco visible y enlace para saltar al contenido.
+
+## Convenciones
+
+- Nombres técnicos en inglés; documentación en español.
+- Textos de la interfaz y etiquetas de accesibilidad en inglés.
+- Componentes en PascalCase y páginas con sufijo Page.
+- Funciones y variables en camelCase; hooks con prefijo use.
+- .jsx para componentes y .js para módulos sin JSX.
+- Imports relativos con extensión; dos espacios, comillas simples en JS y dobles en JSX, punto y coma.
+- CSS separado: variables de diseño, estilos generales y estructura responsive.
+- Reutilizar componentes pequeños y evitar estilos inline o duplicación.
+- Mantener estado local por defecto. Agregar context solo cuando haya una necesidad compartida.
+- No incorporar lógica de negocio ni solicitudes HTTP en los layouts.
+
+## Agregar una página
+
+1. Crear src/pages/ExamplePage.jsx con un componente exportado por defecto.
+2. Importarlo en src/routes/AppRouter.jsx.
+3. Agregar la ruta dentro del grupo de AppLayout o AuthLayout, según corresponda:
+
+~~~jsx
+<Route path="example" element={<ExamplePage />} />
+~~~
+
+4. Si debe aparecer en la navegación principal, agregar su entrada al arreglo navigationItems de Sidebar.jsx.
+5. Revisar acceso directo, navegación, ruta activa y tamaños de pantalla.
+
+Ejemplo del contenido de una página:
+
+~~~jsx
+import PageHeader from '../components/layout/PageHeader.jsx';
+
+export default function ExamplePage() {
+  return <PageHeader title="Example" />;
+}
+~~~
+
+## Agregar un componente reutilizable
+
+1. Revisar si ya existe una pieza equivalente.
+2. Crear un archivo PascalCase en components/common/ si es general, o en la carpeta de su dominio si es específico.
+3. Recibir datos y callbacks por props; mantener separada la comunicación HTTP.
+4. Agregar las clases CSS necesarias y reutilizar las variables de diseño.
+5. Importarlo desde las páginas o componentes que lo necesiten. Quitar el .gitkeep si era una carpeta reservada.
+
+## Integrar la API en el futuro
 
 Flujo previsto:
 
-```text
-Page / Component → Service → api.js → Backend /api
-```
+~~~text
+Page / Hook → Service por recurso → services/api.js → Backend /api
+~~~
 
-Cuando se implemente, `services/api.js` leerá `import.meta.env.VITE_API_URL` y centralizará la URL base, opciones comunes y tratamiento de respuestas HTTP. Los services de cada recurso definirán operaciones como `createPost` y `getUserById`. Usar rutas relativas como `/posts`: la URL base ya incluye `/api` y no debe duplicarse.
+La configuración base ya se puede importar:
 
-Contrato acordado con backend para respuestas exitosas:
+~~~js
+import { apiBaseUrl } from './api.js';
+~~~
 
-```json
-{
-  "data": {}
-}
-```
+Cuando comience la integración, agregar el transporte compartido con fetch en services/api.js y crear services como postService.js o userService.js. Usar rutas relativas al prefijo /api, sin duplicarlo. Acordar endpoints, campos, códigos HTTP y autenticación con backend antes de implementar cada operación.
 
-`data` contendrá un objeto o una lista según la operación. Respuestas de error:
+El contrato previsto devuelve { data: ... } en éxito y { error: { message: ... } } en errores. El transporte futuro deberá comprobar el estado HTTP y propagar los errores; páginas y hooks manejarán carga y error. Estos comportamientos todavía no están implementados.
 
-```json
-{
-  "error": {
-    "message": "Mensaje del error"
-  }
-}
-```
+## Validación y pendientes
 
-El transporte compartido deberá comprobar el estado HTTP, extraer `data` en éxitos y propagar un error con el mensaje disponible en fallos. Las páginas o hooks gestionarán los estados de carga y error para la UI. Antes de implementar cada operación, acordar campos, códigos HTTP y errores con backend. Estos módulos y comportamientos todavía no existen.
+- Instalación, inicio de Vite, lint y build verificados.
+- Las cinco rutas se comprueban mediante respuesta HTTP y renderizado React con el router en memoria: layouts correctos, enlaces de navegación y estado activo.
+- El frontend renderiza sin backend y no implementa solicitudes HTTP.
+- La revisión visual interactiva quedó pendiente: la herramienta de control del navegador no pudo determinar la URL de Opera con suficiente certeza y detuvo el acceso. El renderizado por código no sustituye esa revisión.
+- Comprobar manualmente las cinco rutas, navegación con clic y teclado, atrás/adelante, recarga y ausencia de scroll horizontal en 1440, 1024, 768, 600, 390 y 320 px.
+- Tras aplicar las actualizaciones compatibles, npm audit sigue informando cuatro alertas moderadas de desarrollo en la cadena ESLint/minimatch. No se incluyen en el bundle de producción; no se aplicó el downgrade de ESLint que propone --force.
 
-## Variables de entorno
-
-Copiar `.env.example` a `.env` dentro de `frontend/`:
-
-```dotenv
-VITE_API_URL=http://localhost:3000/api
-```
-
-La URL coincide con el puerto local previsto de backend (`3000`) y su prefijo `/api`. La aplicación vacía todavía no lee esta variable ni necesita una API disponible. Al integrar backend, ajustar la URL según el entorno y reiniciar Vite después de cambiar `.env`.
-
-Las variables `VITE_*` se exponen en el código del navegador: solo pueden contener configuración pública. Nunca agregar `JWT_SECRET`, credenciales de MongoDB ni otros secretos al frontend.
-
-No subir `.env` ni variantes locales. Mantener `.env.example` actualizado sin valores sensibles. `.gitignore` también excluye `node_modules/`, `dist/`, cobertura y logs.
-
-## Cómo ejecutar el proyecto
-
-Desde la raíz del checkout de la rama `frontend`:
-
-```sh
-cd frontend
-npm ci
-```
-
-Crear `.env` copiando `.env.example` (en PowerShell: `Copy-Item .env.example .env`). Después:
-
-```sh
-npm run dev
-```
-
-Abrir la URL que muestre Vite en la terminal. La pantalla vacía es el resultado esperado en esta etapa; no es necesario iniciar backend.
-
-Para comprobar la compilación:
-
-```sh
-npm run build
-```
-
-Genera `dist/`, que no se versiona. Para revisar esa compilación localmente:
-
-```sh
-npm run preview
-```
-
-## Cómo agregar una nueva funcionalidad
-
-Ejemplo conceptual para publicaciones, a realizar en una tarea posterior:
-
-1. Acordar el contrato HTTP con backend y crear `services/postService.js`, utilizando el transporte compartido de `services/api.js` cuando se implemente.
-2. Crear los componentes necesarios en `components/posts/`; ubicar piezas genéricas en `components/common/`.
-3. Crear o actualizar la página correspondiente, por ejemplo `pages/HomePage.jsx`, y registrar su navegación en `routes/` cuando exista el router.
-4. Manejar estados de carga y error en la página o en un hook reutilizable, evitando estado global innecesario.
-5. Integrar con la API a través del service y comprobar respuestas exitosas y errores del contrato.
-6. Mantener UI, acceso HTTP, estado y lógica reutilizable separados.
-
-Trabajar los cambios de `frontend/` en la rama `frontend`. Reutilizar componentes existentes antes de crear otros, actualizar documentación y `.env.example` si cambia la configuración, y agregar verificaciones relevantes cuando exista comportamiento. Si se agrega una dependencia, actualizar también `package-lock.json`; no subir `node_modules/`, `dist/` ni secretos.
+Juliana puede comenzar reemplazando los placeholders de pages/, agregando los formularios en components/auth/ y construyendo los componentes de cada dominio. Feed, publicaciones, likes, comentarios, perfil, modal de edición, Settings, sesión e integración REST pertenecen a sus próximas tareas.
