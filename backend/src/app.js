@@ -1,5 +1,7 @@
 import express from 'express';
 import cors from 'cors';
+import notFoundMiddleware from './middlewares/notFoundMiddleware.js';
+import errorMiddleware from './middlewares/errorMiddleware.js';
 
 const app = express();
 
@@ -14,5 +16,8 @@ app.get('/api/health', (request, response) => {
     },
   });
 });
+
+app.use(notFoundMiddleware);
+app.use(errorMiddleware);
 
 export default app;
