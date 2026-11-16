@@ -1,3 +1,7 @@
-export default function Avatar({ initials, accent = false }) {
-  return <span className={`avatar${accent ? ' avatar-accent' : ''}`} aria-hidden="true">{initials}</span>;
+export default function Avatar({ initials, src, accent = false }) {
+  return (
+    <span className={`avatar${accent ? ' avatar-accent' : ''}`} aria-hidden="true">
+      {src ? <img src={src} alt="" loading="lazy" /> : initials}
+    </span>
+  );
 }

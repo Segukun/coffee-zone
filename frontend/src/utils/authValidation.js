@@ -41,3 +41,25 @@ export function validateRegister(values) {
 
   return errors;
 }
+
+export function validatePasswordChange(values) {
+  const errors = {};
+
+  if (!values.currentPassword) {
+    errors.currentPassword = 'Enter your current password.';
+  }
+
+  if (!values.newPassword) {
+    errors.newPassword = 'Enter your new password.';
+  } else if (values.newPassword.length < 8 || !/[a-zA-Z]/.test(values.newPassword) || !/[0-9]/.test(values.newPassword)) {
+    errors.newPassword = 'Use at least 8 characters, including a letter and a number.';
+  }
+
+  if (!values.confirmPassword) {
+    errors.confirmPassword = 'Confirm your new password.';
+  } else if (values.confirmPassword !== values.newPassword) {
+    errors.confirmPassword = 'Passwords do not match.';
+  }
+
+  return errors;
+}
