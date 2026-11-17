@@ -14,3 +14,8 @@ export async function updateMe(request, response) {
   const data = await userService.updateOwnProfile(request.user.id, request.body);
   response.set('Cache-Control', 'no-store').json({ data });
 }
+
+export async function changePassword(request, response) {
+  const data = await userService.changePassword(request.user.id, request.body);
+  response.set('Cache-Control', 'no-store').status(200).json({ data });
+}

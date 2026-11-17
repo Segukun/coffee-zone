@@ -325,6 +325,34 @@ Los errores siguen el formato global. Datos inválidos generan 400 `VALIDATION_E
 
 La eliminación de cuentas queda pendiente. Antes de implementar `DELETE /api/users/me` se debe definir el tratamiento de publicaciones, comentarios, likes y referencias al usuario en otras colecciones. Las políticas de eliminación de documentos relacionados se definirán en esa tarjeta.
 
+## Cambio de contraseña
+
+`PATCH /api/users/me/password` requiere `Authorization: Bearer JWT_TOKEN` y usa exclusivamente `request.user.id`. El body admite exactamente `currentPassword` y `newPassword`, ambos strings presentes y con contenido. Los campos adicionales y operadores MongoDB generan HTTP 400.
+
+```http
+PATCH /api/users/me/password
+Authorization: Bearer JWT_TOKEN
+Content-Type: application/json
+
+{"currentPassword":"CurrentPassword123!","newPassword":"NewPassword456!"}
+```
+
+El service verifica la contraseña actual mediante `bcrypt.compare()`. Una contraseña incorrecta genera HTTP 401 con `INVALID_CURRENT_PASSWORD` y `Current password is incorrect`. Después aplica a la nueva contraseña la política compartida con Sign Up, de al menos 8 caracteres Unicode y máximo 72 bytes UTF-8, y comprueba con bcrypt que sea diferente de la anterior. Los espacios y las mayúsculas se conservan exactamente. La contraseña actual también respeta el máximo de bytes para evitar truncamientos, pero admite contraseñas antiguas menores de ocho caracteres.
+
+El hash nuevo se genera de forma asíncrona con el mismo `getBcryptRounds()` del registro, por defecto `BCRYPT_ROUNDS=12`. La actualización filtra por `_id` y por el hash que se verificó. Si otra solicitud cambia ese hash primero, la actualización no coincide y devuelve HTTP 409 `PASSWORD_UPDATE_CONFLICT`. El cliente deberá volver a intentar la operación con la contraseña actualizada.
+
+Se actualiza únicamente `passwordHash`, además de `updatedAt` gestionado por Mongoose. El perfil y `createdAt` se conservan. La respuesta HTTP 200 lleva `Cache-Control: no-store` y el siguiente contenido
+
+```json
+{"data":{"message":"Password updated successfully"}}
+```
+
+Datos inválidos o contraseña nueva igual a la actual generan 400 `VALIDATION_ERROR`. El middleware JWT conserva su respuesta 401 para tokens inválidos o usuarios eliminados. Si el usuario desaparece después de autenticar, el service devuelve 404 `USER_NOT_FOUND`. Los errores inesperados se procesan como 500 con mensaje genérico mediante el middleware global.
+
+Los JWT ya emitidos siguen siendo válidos hasta su vencimiento. Cambiar la contraseña no cierra las sesiones que ya tengan tokens válidos. La respuesta de cambio no emite otro token. La revocación de sesiones queda para una mejora futura.
+
+`test/passwordChange.test.js` ejecuta los casos de autenticación, validación, privacidad, Login posterior, timestamps y actualizaciones concurrentes contra MongoDB temporal local. Forma parte de `npm test` y utiliza únicamente usuarios ficticios de ese proceso temporal.
+
 ## Diagnóstico seguro del arranque
 
 Si falla el inicio, `utils/startupDiagnostics.js` registra la etapa (`database` o `http`), tipo, código, categoría y una orientación estática en inglés. También extrae códigos seguros de errores anidados de selección de servidores. Nunca registra el mensaje original, stack, hostname, URI, credenciales ni la topología completa. Los nombres y códigos de texto se filtran mediante listas permitidas; los desconocidos se muestran como `UnknownError` / `UNKNOWN`.
