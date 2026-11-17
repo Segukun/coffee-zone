@@ -1,6 +1,7 @@
 import './config/environment.js';
 import app from './app.js';
 import connectDatabase from './config/database.js';
+import User from './models/User.js';
 import getStartupDiagnostics from './utils/startupDiagnostics.js';
 
 const PORT = process.env.PORT || 3000;
@@ -8,6 +9,7 @@ const PORT = process.env.PORT || 3000;
 const startServer = async () => {
   try {
     await connectDatabase();
+    await User.init();
 
     app.listen(PORT, (error) => {
       if (error) {
