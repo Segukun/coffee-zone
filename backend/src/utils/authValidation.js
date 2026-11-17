@@ -1,5 +1,6 @@
 import AppError from './AppError.js';
 import { hasLength, isEmail, isRequired, isType, validateRequiredFields } from './validationUtils.js';
+import { isValidName, isValidUsername } from './userValidation.js';
 
 function validateStringFields(input, fields) {
   const details = validateRequiredFields(input, fields);
@@ -31,10 +32,10 @@ export function validateRegistration(input) {
   const email = input.email.trim().toLowerCase();
   const details = credentialDetails(email, input.password);
 
-  if (!hasLength(name, { min: 2, max: 80 })) {
+  if (!isValidName(name)) {
     details.push({ field: 'name', message: 'Name must contain between 2 and 80 characters.' });
   }
-  if (!hasLength(username, { min: 3, max: 30 }) || !/^[a-z0-9_]+$/.test(username)) {
+  if (!isValidUsername(username)) {
     details.push({ field: 'username', message: 'Username must contain 3 to 30 letters, numbers, or underscores.' });
   }
   if (!hasLength([...input.password], { min: 8 })) {

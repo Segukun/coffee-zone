@@ -6,20 +6,10 @@ import AppError from '../utils/AppError.js';
 import { isObjectId } from '../utils/validationUtils.js';
 import { validateLogin, validateRegistration } from '../utils/authValidation.js';
 import { getBcryptRounds, getJwtConfig } from '../config/auth.js';
+import { serializeAccount } from '../utils/userSerialization.js';
 
 const identityCollation = { locale: 'en', strength: 2 };
 const dummyHashes = new Map();
-
-function publicUser(user) {
-  return {
-    id: user._id.toString(),
-    name: user.name,
-    username: user.username,
-    email: user.email,
-    bio: user.bio ?? '',
-    avatar: user.avatar ?? '',
-  };
-}
 
 function getDummyHash(rounds) {
   if (!dummyHashes.has(rounds)) {
@@ -39,7 +29,7 @@ export async function registerUser(input) {
   const passwordHash = await bcrypt.hash(password, getBcryptRounds());
   // Unique indexes remain authoritative if concurrent registrations pass the precheck.
   const user = await User.create({ name, username, email, passwordHash });
-  return { user: publicUser(user) };
+  return { user: serializeAccount(user) };
 }
 
 export async function loginUser(input) {
@@ -53,7 +43,7 @@ export async function loginUser(input) {
   }
 
   const token = jwt.sign({}, secret, { algorithm: 'HS256', subject: user._id.toString(), expiresIn });
-  return { token, user: publicUser(user) };
+  return { token, user: serializeAccount(user) };
 }
 
 export async function authenticateToken(token) {

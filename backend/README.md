@@ -2,7 +2,7 @@
 
 Coffee Zone es una red social para desarrolladores y estudiantes de programación, con inspiración visual en X/Twitter y LinkedIn.
 
-Esta rama (`backend`) incluye registro, login con JWT, middleware de autenticación, health check, conexión a MongoDB, modelo `User`, validaciones reutilizables y manejo global de errores.
+Esta rama (`backend`) incluye registro, login con JWT, consulta y edición de perfiles, middleware de autenticación, health check, conexión a MongoDB, modelo `User`, validaciones reutilizables y manejo global de errores.
 
 ## Stack y entorno común
 
@@ -13,7 +13,7 @@ Esta rama (`backend`) incluye registro, login con JWT, middleware de autenticaci
 - bcrypt para hashes asíncronos de contraseñas y jsonwebtoken para JWT HS256.
 - JavaScript con módulos ES (`import` / `export`), dos espacios de indentación, comillas simples y punto y coma.
 
-`package.json` define las dependencias y `package-lock.json` fija sus versiones para instalaciones reproducibles. Las pruebas de `npm test` usan mocks de almacenamiento y funcionan sin credenciales. La integración opcional utiliza una base temporal aislada de MongoDB.
+`package.json` define las dependencias y `package-lock.json` fija sus versiones para instalaciones reproducibles. `npm test` combina mocks de almacenamiento y MongoDB temporal local para perfiles, sin credenciales reales. La integración adicional utiliza una base temporal aislada de MongoDB.
 
 ## Estructura
 
@@ -83,13 +83,11 @@ Endpoints públicos disponibles
 | POST | `/api/auth/register` | Registro, HTTP 201 |
 | POST | `/api/auth/login` | JWT y usuario, HTTP 200 |
 
-Los futuros endpoints de perfiles y publicaciones utilizarán el middleware de autenticación. Actualmente se prueban rutas protegidas en una aplicación Express aislada.
+Los endpoints `/api/users/me` utilizan el middleware de autenticación existente. La consulta por username es pública.
 
 Las siguientes rutas corresponden a próximas tarjetas
 
 ```text
-GET    /api/users/:id
-PATCH  /api/users/me
 GET    /api/posts
 POST   /api/posts
 GET    /api/posts/:id
@@ -265,6 +263,68 @@ router.post('/', authMiddleware, createPost);
 // createPost puede acceder a request.user.id.
 ```
 
+## Perfiles de usuario
+
+| Método | Endpoint | Autenticación | Resultado |
+| --- | --- | --- | --- |
+| GET | `/api/users/me` | Bearer JWT | Perfil propio con email y ambas fechas |
+| GET | `/api/users/:username` | Público | Perfil público, con fecha de creación |
+| PATCH | `/api/users/me` | Bearer JWT | Actualización parcial del perfil propio |
+
+La ruta específica `/me` se registra primero. `me` queda reservado por el mínimo de tres caracteres del username, compartido entre registro, edición y consulta pública. Los parámetros username se recortan y normalizan a minúsculas. La búsqueda usa collation para encontrar también documentos antiguos con mayúsculas.
+
+Las rutas protegidas obtienen la identidad exclusivamente de `request.user.id`. Un JWT de un usuario eliminado devuelve 401. Si el usuario desaparece después de autenticar y antes de la consulta o actualización, el service devuelve 404.
+
+El perfil propio contiene `id`, `name`, `username`, `email`, `bio`, `avatar`, `createdAt` y `updatedAt`. La representación pública contiene únicamente `id`, `name`, `username`, `bio`, `avatar` y `createdAt`. `userSerialization.js` selecciona explícitamente cada propiedad y comparte la representación de cuenta con los endpoints de autenticación. Sus respuestas existentes conservan sus campos.
+
+Ejemplo de edición parcial
+
+```http
+PATCH /api/users/me
+Authorization: Bearer JWT_TOKEN
+Content-Type: application/json
+
+{"name":"Alex Morgan","username":"alexdev","bio":"Software developer","avatar":"https://example.com/avatar.png"}
+```
+
+Reglas de los campos editables
+
+- `name` debe ser string de 2 a 80 caracteres después de recortar espacios.
+- `username` debe contener entre 3 y 30 letras ASCII, números o `_`. Se guarda en minúsculas.
+- `bio` admite hasta 500 caracteres y una cadena vacía para borrar la descripción.
+- `avatar` admite hasta 2048 caracteres, una URL absoluta HTTP/HTTPS sin credenciales incrustadas, o una cadena vacía para borrarlo. El servidor almacena la referencia URL.
+
+Todos los campos deben ser strings. Se recortan espacios exteriores. El cuerpo debe contener al menos un campo editable. Cualquier campo adicional, incluido `id`, `_id`, `email`, `passwordHash`, fechas, roles u operadores MongoDB, provoca 400 y se rechaza toda la actualización.
+
+La actualización usa un `$set` construido con campos permitidos y un filtro basado en la identidad autenticada. Los campos omitidos conservan sus valores, incluso ante ediciones concurrentes de campos diferentes. Mongoose actualiza `updatedAt` y conserva `createdAt`.
+
+La respuesta HTTP 200 de consulta propia o edición tiene este formato
+
+```json
+{
+  "data": {
+    "user": {
+      "id": "507f1f77bcf86cd799439011",
+      "name": "Alex Morgan",
+      "username": "alexdev",
+      "email": "alex@example.com",
+      "bio": "Software developer",
+      "avatar": "https://example.com/avatar.png",
+      "createdAt": "2026-11-17T12:00:00.000Z",
+      "updatedAt": "2026-11-17T13:00:00.000Z"
+    }
+  }
+}
+```
+
+La respuesta de `GET /api/users/alexdev` usa el mismo envoltorio `data.user` con los campos públicos indicados arriba. Las respuestas propias llevan `Cache-Control: no-store`.
+
+Los errores siguen el formato global. Datos inválidos generan 400 `VALIDATION_ERROR`, autenticación inválida 401 `UNAUTHORIZED`, perfiles ausentes 404 `USER_NOT_FOUND` y usernames ocupados 409 `DUPLICATE_KEY`. Una comprobación previa excluye al propio usuario, permitiendo conservar su username. El índice único sigue resolviendo conflictos concurrentes. Los errores inesperados generan 500 con mensaje genérico.
+
+`test/profiles.test.js` prueba las tres rutas con un MongoDB local temporal, separado de Atlas y de los usuarios reales. Comprueba protección de identidad, privacidad, tipos, límites, campos prohibidos, actualizaciones parciales, timestamps y carreras contra el índice único. `npm test` incluye estas pruebas y la regresión de autenticación. Su primera ejecución puede descargar el binario oficial mediante la dependencia de desarrollo ya existente `mongodb-memory-server`.
+
+La eliminación de cuentas queda pendiente. Antes de implementar `DELETE /api/users/me` se debe definir el tratamiento de publicaciones, comentarios, likes y referencias al usuario en otras colecciones. Las políticas de eliminación de documentos relacionados se definirán en esa tarjeta.
+
 ## Diagnóstico seguro del arranque
 
 Si falla el inicio, `utils/startupDiagnostics.js` registra la etapa (`database` o `http`), tipo, código, categoría y una orientación estática en inglés. También extrae códigos seguros de errores anidados de selección de servidores. Nunca registra el mensaje original, stack, hostname, URI, credenciales ni la topología completa. Los nombres y códigos de texto se filtran mediante listas permitidas; los desconocidos se muestran como `UnknownError` / `UNKNOWN`.
@@ -348,7 +408,7 @@ npm run test:integration
 
 Por defecto utiliza `mongodb-memory-server`, una dependencia de desarrollo que inicia un proceso MongoDB temporal local con el binario oficial. La primera instalación o ejecución descarga ese binario y requiere acceso a Internet. El proceso se detiene al finalizar. Para probar Atlas u otro servidor, configurar explícitamente `MONGODB_TEST_URI` en el entorno del proceso.
 
-El script crea una base nueva `coffee_zone_auth_test_<uuid>` con `dbName`, espera sus índices únicos y comprueba registro, hashes, duplicados, una carrera real de índices, login, JWT, documentos antiguos y usuario eliminado. Crea únicamente usuarios ficticios en esa base y elimina esa misma base al finalizar, comprobando el nombre antes de eliminarla. La cuenta de testing remota debe tener permisos para crear y eliminar la base temporal. La suite normal utiliza mocks y no carga el archivo local de credenciales.
+El script crea una base nueva `coffee_zone_auth_test_<uuid>` con `dbName`, espera sus índices únicos y comprueba registro, hashes, duplicados, una carrera real de índices, login, JWT, documentos antiguos y usuario eliminado. Crea únicamente usuarios ficticios en esa base y elimina esa misma base al finalizar, comprobando el nombre antes de eliminarla. La cuenta de testing remota debe tener permisos para crear y eliminar la base temporal. La suite normal combina mocks y MongoDB temporal local y no carga el archivo local de credenciales.
 
 ## Cómo agregar una nueva funcionalidad
 
