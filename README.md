@@ -20,26 +20,18 @@ El diseño general estará inspirado en plataformas como X/Twitter y LinkedIn, a
 - MongoDB
 - Mongoose
 
-## MVP
-
-La primera versión del proyecto incluirá:
-
-- Registro de usuarios
-- Inicio de sesión
-- Autenticación con JWT
-- Perfil de usuario
-- Creación de publicaciones
-- Publicaciones con snippets de código
-- Feed principal
-- Likes
-- Comentarios
-- Diseño responsive
-
 ## Estructura
 
 ```text
 coffee-zone/
 ├── frontend/
 ├── backend/
-├── docs/
 └── README.md
+```
+
+La estructura se prepara en las ramas `frontend` y `backend`, respectivamente; cada checkout contiene su parte hasta integrarlas.
+
+- [Documentación de frontend](frontend/README.md) — disponible en la rama `frontend`.
+- [Documentación de backend](backend/README.md) — disponible en la rama `backend`.
+
+Estado actual: estructura base y documentación técnica. La autenticación futura utilizará JWT y bcrypt; todavía no hay funcionalidades del MVP implementadas.
