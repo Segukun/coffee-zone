@@ -7,7 +7,7 @@ Esta rama (`backend`) incluye registro, login con JWT, consulta y edición de pe
 ## Stack y entorno común
 
 - Node.js 24.x y npm, también utilizados en frontend.
-- Express.js para HTTP, CORS abierto para desarrollo y `express.json()` para recibir JSON.
+- Express.js para HTTP, CORS con lista de orígenes autorizados y parser JSON con tamaño limitado.
 - dotenv para cargar `.env` y nodemon para reiniciar el servidor durante el desarrollo.
 - MongoDB y Mongoose para persistencia y ODM; el arranque conecta a MongoDB antes de escuchar solicitudes.
 - bcrypt para hashes asíncronos de contraseñas y jsonwebtoken para JWT HS256.
@@ -59,7 +59,7 @@ Route → Middleware → Controller → Service → Model → MongoDB
 | `app.js` | Configurar Express, middlewares generales y registro de rutas. No iniciar el servidor. |
 | `server.js` | Cargar dotenv, leer `PORT`, conectar a MongoDB e iniciar el servidor con `app.listen`. |
 
-El flujo representa el camino habitual de las funcionalidades futuras. El orden en `app.js` es CORS → parser JSON → rutas → rutas no encontradas → errores globales. El health check temporal conserva su respuesta y solo confirma que el servidor HTTP responde; no comprueba la disponibilidad actual de la base de datos.
+El orden en `app.js` es Helmet → CORS → límites de autenticación → validación de Content-Type → parser JSON → rutas → rutas no encontradas → errores globales. El health check confirma que el servidor HTTP responde y no comprueba la disponibilidad actual de la base de datos.
 
 ## Convenciones de nombres y código
 
@@ -131,13 +131,19 @@ MONGODB_URI=
 JWT_SECRET=
 JWT_EXPIRES_IN=1d
 BCRYPT_ROUNDS=12
+CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
+LOGIN_RATE_LIMIT_MAX=10
+REGISTER_RATE_LIMIT_MAX=5
+AUTH_RATE_LIMIT_WINDOW_MS=900000
+JSON_BODY_LIMIT_BYTES=16384
+TRUST_PROXY=false
 ```
 
 | Variable | Uso |
 | --- | --- |
-| `PORT` | Puerto HTTP. Usa `3000` como valor por defecto si no está definido o está vacío, consistente con `VITE_API_URL` del frontend. |
+| `PORT` | Puerto HTTP entero entre 1 y 65535. Por defecto `3000` cuando no está definido. Un valor vacío es inválido. |
 | `MONGODB_URI` | URI de conexión a MongoDB. |
-| `JWT_SECRET` | Secreto privado aleatorio de al menos 32 bytes. Se valida al firmar o verificar tokens. |
+| `JWT_SECRET` | Secreto privado aleatorio de al menos 32 bytes. Se rechazan valores triviales repetidos y placeholders conocidos. Se valida antes del arranque y al firmar/verificar. |
 | `JWT_EXPIRES_IN` | Expiración positiva con unidad `s`, `m`, `h` o `d`, por ejemplo `30m`, `24h` o `1d`. Por defecto `1d`. |
 | `BCRYPT_ROUNDS` | Costo entero de 10 a 14. Por defecto 12. |
 
@@ -179,11 +185,57 @@ Probar `GET http://localhost:3000/api/health` en el navegador o con `curl.exe ht
 }
 ```
 
-CORS permite cualquier origen durante el desarrollo; la restricción de orígenes se definirá al preparar el despliegue.
+## Seguridad básica del MVP
+
+`config/security.js` valida la configuración crítica antes de conectar a MongoDB o abrir el puerto HTTP. Comprueba la URI con el parser del driver, puerto, secreto y expiración JWT, costo bcrypt, CORS, límites y proxies. El diagnóstico usa códigos seguros como `AUTH_CONFIG_ERROR`, `MONGODB_URI_INVALID` o `SECURITY_CONFIG_ERROR` y nunca imprime los valores rechazados. El valor de la URI legacy permanece en el archivo local de configuración.
+
+### CORS
+
+`CORS_ORIGINS` es una lista separada por comas de orígenes HTTP/HTTPS completos, por ejemplo `http://localhost:5173,https://coffee.example`. Cada origen debe tener únicamente esquema, host y puerto opcional. Rutas, query strings, credenciales, comodines y entradas vacías se rechazan. Los orígenes se normalizan mediante URL.
+
+En desarrollo, si la variable no está definida, se permiten `http://localhost:5173` y `http://127.0.0.1:5173`. En `NODE_ENV=production` la lista explícita es obligatoria. Los orígenes ajenos reciben 403 JSON con `CORS_ORIGIN_DENIED`. Las solicitudes sin Origin se procesan normalmente. Los preflights permitidos reciben 204 y admiten `Authorization` y `Content-Type`. Se permiten GET, POST, PATCH y OPTIONS y se exponen los headers de límites y reintento. La API utiliza Bearer JWT y mantiene las credenciales CORS desactivadas.
+
+CORS controla qué respuestas puede leer JavaScript desde el navegador. Los clientes sin navegador pueden hacer solicitudes y deben pasar los mismos controles de autenticación y autorización.
+
+### Límites de autenticación
+
+`express-rate-limit` aplica contadores separados por IP para `POST /api/auth/login` y `POST /api/auth/register`. Por defecto son 10 y 5 solicitudes, respectivamente, en 15 minutos. El generador de claves de la biblioteca contempla IPv4 y agrupa IPv6 por subred /56. Todas las solicitudes cuentan, incluidos éxitos, credenciales incorrectas, validaciones fallidas, JSON malformado y Content-Type incorrecto. Los límites se ejecutan antes de parsear el body.
+
+La respuesta al superar el límite es HTTP 429
+
+```json
+{"error":{"code":"RATE_LIMIT_EXCEEDED","message":"Too many requests. Please try again later."}}
+```
+
+Se devuelven `RateLimit`, `RateLimit-Policy` y, al bloquear, `Retry-After`. Los contadores son independientes entre Login y Register y no afectan al health check ni a las rutas de perfiles. OPTIONS no consume intentos.
+
+| Variable | Valor predeterminado | Validación |
+| --- | --- | --- |
+| `LOGIN_RATE_LIMIT_MAX` | 10 | Entero positivo |
+| `REGISTER_RATE_LIMIT_MAX` | 5 | Entero positivo |
+| `AUTH_RATE_LIMIT_WINDOW_MS` | 900000 | Entero positivo hasta 2147483647 ms |
+| `JSON_BODY_LIMIT_BYTES` | 16384 | Entero positivo hasta 1048576 bytes |
+| `TRUST_PROXY` | false | `false` o lista de IP/CIDR explícitos |
+
+El almacenamiento es en memoria por proceso y se reinicia al reiniciar el servidor. Un despliegue con varias instancias necesita un store compartido para coordinar los límites. Esa infraestructura queda para el despliegue público.
+
+### Proxy y HTTP
+
+Localmente `trust proxy` está desactivado, de modo que los headers de IP enviados por un cliente no determinan su identidad. Detrás de un proxy configurado para sobrescribir headers de IP, indicar únicamente las IP/CIDR reales de ese proxy en `TRUST_PROXY`, por ejemplo `127.0.0.1/32,::1/128` para un proxy del mismo equipo. Los valores `true`, cantidades de saltos y redes /0 se rechazan. Antes del despliegue se debe verificar que todas las rutas de red atraviesen los proxies declarados y que el cliente no pueda falsificar su dirección.
+
+Helmet aplica headers de seguridad y elimina `X-Powered-By`. CSP está desactivada para esta API REST y CORP admite acceso cross-origin sujeto a CORS. Los payloads JSON tienen un máximo predeterminado de 16 KiB, suficiente para los campos actuales del MVP. Un body excesivo devuelve 413 JSON. Las solicitudes POST/PUT/PATCH con body exigen `Content-Type: application/json` y reciben 415 si usan otro formato. Un JSON malformado devuelve 400 sin mostrar el contenido original.
+
+### Auditoría y límites de alcance
+
+Las contraseñas siguen usando bcrypt asíncrono, la política compartida de 8 caracteres y 72 bytes y la protección de concurrencia al cambiarlas. JWT conserva HS256, verificación de firma y expiración, `sub` e identidad mínima en `request.user`. Los JWT existentes siguen válidos hasta expirar después de cambiar la contraseña. El secreto debe generarse con aleatoriedad criptográfica, como muestra el comando de generación de esta documentación. La longitud y el rechazo de placeholders no demuestran por sí solos que un valor sea aleatorio.
+
+Los serializadores seleccionan campos explícitos y las actualizaciones del perfil rechazan propiedades adicionales y operadores. El perfil público excluye el email. Los errores internos mantienen mensajes genéricos y los logs registran únicamente metadatos operativos permitidos. `.env` está ignorado por Git y `.env.example` contiene únicamente configuración pública y espacios para los secretos.
+
+La auditoría de dependencias de esta tarjeta encontró dos alertas moderadas en Nodemon/minimatch, usadas en desarrollo. La corrección sugerida por npm exige cambiar el rango declarado de Nodemon. Se mantienen documentadas y no se aplicó `npm audit fix --force`. Las dependencias de producción no presentan alertas en esa revisión. Para despliegue público se deberán revisar HTTPS, orígenes reales, proxies, store compartido de límites, gestión y rotación de secretos y monitoreo seguro. Revocación de sesiones y recuperación de contraseña corresponden a próximas mejoras.
 
 ## Registro y login
 
-La implementación sigue `authRoutes.js` → `authController.js` → `authService.js` → `User`. Las reglas HTTP de autenticación se componen en `utils/authValidation.js` con las funciones de `validationUtils.js`. `config/auth.js` valida la configuración cuando se utiliza y propaga errores mediante `AppError`.
+La implementación sigue `authRoutes.js` → `authController.js` → `authService.js` → `User`. Las reglas HTTP de autenticación se componen en `utils/authValidation.js` con las funciones de `validationUtils.js`. `config/auth.js` valida la configuración al usarla y la validación de arranque también la comprueba antes de aceptar solicitudes. Los errores controlados se propagan mediante `AppError`.
 
 Para registrar un usuario, enviar `POST /api/auth/register` con `Content-Type: application/json` y el siguiente cuerpo
 

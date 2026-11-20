@@ -1,8 +1,8 @@
-import { after, before, test } from 'node:test';
+import { afterEach, before, beforeEach, test } from 'node:test';
 import assert from 'node:assert/strict';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
-import app from '../src/app.js';
+import { createApp } from '../src/app.js';
 import User from '../src/models/User.js';
 import { configureAuth, mockUserQuery, post, serve } from '../test-support/authTestUtils.js';
 
@@ -10,10 +10,10 @@ const password = 'ExamplePassword123!';
 let http;
 let user;
 before(async () => {
-  http = await serve(app);
   user = new User({ name: 'Alex Morgan', username: 'alexcodes', email: 'alex@example.com', passwordHash: await bcrypt.hash(password, 10) });
 });
-after(async () => { await http.close(); });
+beforeEach(async () => { http = await serve(createApp()); });
+afterEach(async () => { await http.close(); });
 
 test('Login returns a verified HS256 JWT with subject, issued-at, and configurable expiration', async (context) => {
   configureAuth(context);

@@ -1,7 +1,7 @@
 import { constants } from 'node:os';
 
 const errorTypes = new Set([
-  'Error', 'TypeError', 'RangeError', 'SyntaxError', 'ReferenceError', 'MongooseError',
+  'Error', 'AppError', 'TypeError', 'RangeError', 'SyntaxError', 'ReferenceError', 'MongooseError',
   'MongooseServerSelectionError', 'MongoServerSelectionError', 'MongoServerError',
   'MongoParseError', 'MongoInvalidArgumentError', 'MongoAPIError', 'MongoNetworkError',
   'MongoNetworkTimeoutError', 'MongoTopologyClosedError', 'MongoRuntimeError',
@@ -13,6 +13,7 @@ const tlsCodes = new Set([
 ]);
 const errorCodes = new Set([
   ...Object.keys(constants.errno), ...dnsCodes, ...tlsCodes, 'MONGODB_URI_MISSING',
+  'MONGODB_URI_INVALID', 'AUTH_CONFIG_ERROR', 'SECURITY_CONFIG_ERROR',
 ]);
 const operations = new Set(['querySrv', 'queryTxt', 'getaddrinfo', 'connect']);
 
@@ -54,6 +55,9 @@ export default function getStartupDiagnostics(error, stage = 'database') {
   if (records.some(({ code }) => code === 'MONGODB_URI_MISSING')) {
     category = 'CONFIGURATION_ERROR';
     hint = 'Set MONGODB_URI in backend/.env or the process environment.';
+  } else if (records.some(({ code }) => ['MONGODB_URI_INVALID', 'AUTH_CONFIG_ERROR', 'SECURITY_CONFIG_ERROR'].includes(code))) {
+    category = 'CONFIGURATION_ERROR';
+    hint = 'Review backend environment configuration, including authentication and security settings.';
   } else if (records.some(({ type }) => ['MongoParseError', 'MongoInvalidArgumentError'].includes(type))) {
     category = 'CONFIGURATION_ERROR';
     hint = 'Check the MongoDB connection string format and percent-encoding of credentials.';

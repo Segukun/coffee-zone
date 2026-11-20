@@ -115,10 +115,10 @@ after(async () => {
 });
 
 test('the production health endpoint retains its original successful response', async () => {
-  const response = await fetch(`${productionUrl}/api/health`);
+  const response = await fetch(`${productionUrl}/api/health`, { headers: { Origin: 'http://localhost:5173' } });
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { data: { status: 'ok', message: 'Coffee Zone API is running' } });
-  assert.equal(response.headers.get('access-control-allow-origin'), '*');
+  assert.equal(response.headers.get('access-control-allow-origin'), 'http://localhost:5173');
 });
 
 test('unknown production endpoints return a safe JSON 404 without echoing the URL', async () => {

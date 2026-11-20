@@ -1,15 +1,15 @@
-import { after, before, test } from 'node:test';
+import { afterEach, beforeEach, test } from 'node:test';
 import assert from 'node:assert/strict';
 import bcrypt from 'bcrypt';
 import mongoose from 'mongoose';
-import app from '../src/app.js';
+import { createApp } from '../src/app.js';
 import User from '../src/models/User.js';
 import { configureAuth, mockUserQuery, post, serve } from '../test-support/authTestUtils.js';
 
 const input = { name: 'Alex Morgan', username: 'alexcodes', email: 'alex@example.com', password: 'ExamplePassword123!' };
 let http;
-before(async () => { http = await serve(app); });
-after(async () => { await http.close(); });
+beforeEach(async () => { http = await serve(createApp()); });
+afterEach(async () => { await http.close(); });
 
 test('Sign Up returns 201, normalizes identifiers, hashes the password, and exposes only public user fields', async (context) => {
   configureAuth(context);

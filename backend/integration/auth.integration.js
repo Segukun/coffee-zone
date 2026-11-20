@@ -6,7 +6,8 @@ import express from 'express';
 import jwt from 'jsonwebtoken';
 import mongoose from 'mongoose';
 import { MongoMemoryServer } from 'mongodb-memory-server';
-import app from '../src/app.js';
+import { createApp } from '../src/app.js';
+import { getSecurityConfig } from '../src/config/security.js';
 import User from '../src/models/User.js';
 import authMiddleware from '../src/middlewares/authMiddleware.js';
 import errorMiddleware from '../src/middlewares/errorMiddleware.js';
@@ -37,7 +38,8 @@ test('authentication integration against a unique temporary MongoDB database', {
     ownsDatabase = true;
     console.log('Temporary test database: ' + databaseName);
     await User.init();
-    http = await serve(app);
+    // This flow exercises storage/authentication; rate-limit boundaries have separate tests.
+    http = await serve(createApp({ ...getSecurityConfig(), registerMax: 100, loginMax: 100 }));
     const protectedApp = express();
     protectedApp.get('/protected', authMiddleware, (request, response) => response.json({ data: request.user }));
     protectedApp.use(errorMiddleware);
