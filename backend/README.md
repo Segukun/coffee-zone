@@ -233,6 +233,12 @@ Los serializadores seleccionan campos explícitos y las actualizaciones del perf
 
 La auditoría de dependencias de esta tarjeta encontró dos alertas moderadas en Nodemon/minimatch, usadas en desarrollo. La corrección sugerida por npm exige cambiar el rango declarado de Nodemon. Se mantienen documentadas y no se aplicó `npm audit fix --force`. Las dependencias de producción no presentan alertas en esa revisión. Para despliegue público se deberán revisar HTTPS, orígenes reales, proxies, store compartido de límites, gestión y rotación de secretos y monitoreo seguro. Revocación de sesiones y recuperación de contraseña corresponden a próximas mejoras.
 
+## Documentación de la API de usuarios
+
+El [contrato completo de los seis endpoints](docs/users-api.md) incluye headers, cuerpos, normalización, respuestas, errores, privacidad y límites de CORS, rate limiting y JWT. La [matriz de requisitos y pruebas](docs/users-api-test-matrix.md) relaciona cada punto de la tarjeta con casos ejecutables y sus resultados.
+
+Flujo para el frontend: registro → login para obtener `data.token` → perfil propio con `Authorization: Bearer <token>` → actualización parcial del perfil → cambio de contraseña con la actual. Consultar perfiles públicos por username sin JWT. Los JWT anteriores al cambio de contraseña siguen vigentes hasta vencer; la respuesta del cambio no emite otro token. La documentación incluye solicitudes reproducibles en PowerShell con cuentas ficticias.
+
 ## Registro y login
 
 La implementación sigue `authRoutes.js` → `authController.js` → `authService.js` → `User`. Las reglas HTTP de autenticación se componen en `utils/authValidation.js` con las funciones de `validationUtils.js`. `config/auth.js` valida la configuración al usarla y la validación de arranque también la comprueba antes de aceptar solicitudes. Los errores controlados se propagan mediante `AppError`.
@@ -478,15 +484,21 @@ Las utilidades generales mantienen su independencia de las rutas. Las reglas de 
 npm test
 ```
 
-Se utiliza `node:test`, `assert` y `fetch` de Node 24. `register.test.js`, `login.test.js` y `authMiddleware.test.js` verifican cada tarjeta por separado con mocks de consultas. bcrypt y JWT ejecutan sus operaciones reales. La suite conserva las 47 pruebas anteriores de errores, validaciones y arranque. Los tests HTTP utilizan puertos locales temporales.
+Se utiliza `node:test`, `assert` y `fetch` de Node 24. `register.test.js`, `login.test.js` y `authMiddleware.test.js` verifican cada tarjeta por separado con mocks de consultas. bcrypt y JWT ejecutan sus operaciones reales. La suite incluye las regresiones de errores, validaciones, arranque y seguridad, además de pruebas HTTP de perfiles y contraseñas con MongoDB temporal. Los tests HTTP utilizan puertos locales temporales.
 
-La integración real se ejecuta por separado
+`npm test` también incluye `test/usersApi.integration.test.js`: recorre los seis endpoints, comprueba el almacenamiento real, los registros rechazados, el rechazo de JWT en cada ruta protegida y el aislamiento entre dos cuentas mediante snapshots completos de MongoDB. Esta suite inicia siempre su propio MongoDB local, ignora `MONGODB_URI` y `MONGODB_TEST_URI`, no carga `.env` y detiene sus procesos al finalizar. Para ejecutar solo esos casos:
+
+```sh
+npm test -- --test-reporter=spec test/usersApi.integration.test.js
+```
+
+Las pruebas adicionales de carreras de registro contra índices reales se ejecutan por separado:
 
 ```sh
 npm run test:integration
 ```
 
-Por defecto utiliza `mongodb-memory-server`, una dependencia de desarrollo que inicia un proceso MongoDB temporal local con el binario oficial. La primera instalación o ejecución descarga ese binario y requiere acceso a Internet. El proceso se detiene al finalizar. Para probar Atlas u otro servidor, configurar explícitamente `MONGODB_TEST_URI` en el entorno del proceso.
+Por defecto utiliza `mongodb-memory-server`, una dependencia de desarrollo que inicia un proceso MongoDB temporal local con el binario oficial. La primera instalación o ejecución descarga ese binario y requiere acceso a Internet. El proceso se detiene al finalizar. Mantener `MONGODB_TEST_URI` sin definir para usar únicamente el MongoDB temporal local. El modo remoto opcional debe apuntar exclusivamente a un servidor y una cuenta de testing; nunca usar producción ni cuentas reales.
 
 El script crea una base nueva `coffee_zone_auth_test_<uuid>` con `dbName`, espera sus índices únicos y comprueba registro, hashes, duplicados, una carrera real de índices, login, JWT, documentos antiguos y usuario eliminado. Crea únicamente usuarios ficticios en esa base y elimina esa misma base al finalizar, comprobando el nombre antes de eliminarla. La cuenta de testing remota debe tener permisos para crear y eliminar la base temporal. La suite normal combina mocks y MongoDB temporal local y no carga el archivo local de credenciales.
 
