@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Coffee Zone</title>
+    <script>
+      let theme = 'dark';
+      try {
+        const savedTheme = localStorage.getItem('coffee-zone-theme');
+        if (savedTheme === 'light' || savedTheme === 'dark') theme = savedTheme;
+      } catch {
+        theme = 'dark';
+      }
+      document.documentElement.dataset.theme = theme;
+
+      let fontSize = 'medium';
+      try {
+        const savedFontSize = localStorage.getItem('coffee-zone-font-size');
+        if (['small', 'medium', 'large'].includes(savedFontSize)) fontSize = savedFontSize;
+      } catch {
+        fontSize = 'medium';
+      }
+      document.documentElement.dataset.fontSize = fontSize;
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
