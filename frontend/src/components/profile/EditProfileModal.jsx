@@ -1,33 +1,48 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { IoCameraOutline, IoImageOutline } from 'react-icons/io5';
 import Avatar from '../common/Avatar.jsx';
 
-export default function EditProfileModal({ profile, onClose }) {
+export default function EditProfileModal({ profile, onSave, onClose }) {
   const formId = useId();
   const dialogRef = useRef(null);
   const imageInputsRef = useRef({});
   const imageUrlsRef = useRef({});
+  const imageFilesRef = useRef({});
+  const removedImagesRef = useRef({ banner: false, photo: false });
   const imageRequestsRef = useRef({ banner: 0, photo: 0 });
+  const pendingImagesRef = useRef({ banner: false, photo: false });
+  const saveRequestRef = useRef(0);
+  const savingRef = useRef(false);
+  const closedRef = useRef(false);
   const [values, setValues] = useState({ name: profile.name, username: profile.username, bio: profile.bio || '', location: profile.location || '' });
-  const [imagePreviews, setImagePreviews] = useState({ banner: '', photo: '' });
+  const [imagePreviews, setImagePreviews] = useState({ banner: profile.bannerUrl || '', photo: profile.avatarUrl || '' });
+  const [pendingImages, setPendingImages] = useState({ banner: false, photo: false });
   const [imageErrors, setImageErrors] = useState({});
   const [errors, setErrors] = useState({});
   const [notice, setNotice] = useState('');
+  const [saving, setSaving] = useState(false);
   const initials = profile.name.trim().split(/\s+/).slice(0, 2).map(part => part[0]).join('').toUpperCase();
 
-  useEffect(() => {
-    const imageRequests = imageRequestsRef.current;
-    const imageUrls = imageUrlsRef.current;
-    dialogRef.current.showModal();
-    return () => {
-      for (const name of ['banner', 'photo']) {
-        imageRequests[name] += 1;
-        if (imageUrls[name]) URL.revokeObjectURL(imageUrls[name]);
-      }
-    };
+  const releaseDraft = useCallback(() => {
+    closedRef.current = true;
+    saveRequestRef.current += 1;
+    for (const name of ['banner', 'photo']) {
+      imageRequestsRef.current[name] += 1;
+      pendingImagesRef.current[name] = false;
+      imageFilesRef.current[name] = undefined;
+      if (imageUrlsRef.current[name]) URL.revokeObjectURL(imageUrlsRef.current[name]);
+      imageUrlsRef.current[name] = undefined;
+    }
   }, []);
 
+  useEffect(() => {
+    closedRef.current = false;
+    dialogRef.current.showModal();
+    return releaseDraft;
+  }, [releaseDraft]);
+
   function handleClose() {
+    releaseDraft();
     dialogRef.current.close();
     onClose();
   }
@@ -43,35 +58,64 @@ export default function EditProfileModal({ profile, onClose }) {
     const { name, files } = event.target;
     const file = files[0];
     event.target.value = '';
-    if (!file) return;
+    if (!file || savingRef.current || closedRef.current) return;
 
     const request = ++imageRequestsRef.current[name];
+    pendingImagesRef.current[name] = false;
+    setPendingImages(current => ({ ...current, [name]: false }));
     setNotice('');
     if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) {
       setImageErrors(current => ({ ...current, [name]: 'Choose a PNG, JPG or WebP image.' }));
       return;
     }
-
-    try {
-      const bitmap = await createImageBitmap(file);
-      bitmap.close();
-    } catch {
-      if (request === imageRequestsRef.current[name]) {
-        setImageErrors(current => ({ ...current, [name]: 'This image could not be opened. Choose another file.' }));
-      }
+    if (file.size > 10 * 1024 * 1024) {
+      setImageErrors(current => ({ ...current, [name]: 'This image is too large. Choose an image up to 10 MB.' }));
       return;
     }
 
-    if (request !== imageRequestsRef.current[name]) return;
-    const previewUrl = URL.createObjectURL(file);
-    if (imageUrlsRef.current[name]) URL.revokeObjectURL(imageUrlsRef.current[name]);
-    imageUrlsRef.current[name] = previewUrl;
-    setImagePreviews(current => ({ ...current, [name]: previewUrl }));
+    pendingImagesRef.current[name] = true;
+    setPendingImages(current => ({ ...current, [name]: true }));
     setImageErrors(current => ({ ...current, [name]: '' }));
+    try {
+      const bitmap = await createImageBitmap(file);
+      bitmap.close();
+      if (closedRef.current || request !== imageRequestsRef.current[name]) return;
+
+      const previewUrl = URL.createObjectURL(file);
+      if (imageUrlsRef.current[name]) URL.revokeObjectURL(imageUrlsRef.current[name]);
+      imageUrlsRef.current[name] = previewUrl;
+      imageFilesRef.current[name] = file;
+      removedImagesRef.current[name] = false;
+      setImagePreviews(current => ({ ...current, [name]: previewUrl }));
+    } catch {
+      if (!closedRef.current && request === imageRequestsRef.current[name]) {
+        setImageErrors(current => ({ ...current, [name]: 'This image could not be opened. Choose another file.' }));
+      }
+    } finally {
+      if (!closedRef.current && request === imageRequestsRef.current[name]) {
+        pendingImagesRef.current[name] = false;
+        setPendingImages(current => ({ ...current, [name]: false }));
+      }
+    }
   }
 
-  function handleSubmit(event) {
+  function handleRemoveImage(name) {
+    if (savingRef.current || closedRef.current) return;
+    imageRequestsRef.current[name] += 1;
+    pendingImagesRef.current[name] = false;
+    imageFilesRef.current[name] = undefined;
+    removedImagesRef.current[name] = true;
+    if (imageUrlsRef.current[name]) URL.revokeObjectURL(imageUrlsRef.current[name]);
+    imageUrlsRef.current[name] = undefined;
+    setImagePreviews(current => ({ ...current, [name]: '' }));
+    setPendingImages(current => ({ ...current, [name]: false }));
+    setImageErrors(current => ({ ...current, [name]: '' }));
+    setNotice('');
+  }
+
+  async function handleSubmit(event) {
     event.preventDefault();
+    if (savingRef.current || closedRef.current || pendingImagesRef.current.banner || pendingImagesRef.current.photo) return;
     const nextErrors = {};
 
     if (!values.name.trim()) nextErrors.name = 'Enter your name.';
@@ -89,7 +133,31 @@ export default function EditProfileModal({ profile, onClose }) {
       return;
     }
 
-    setNotice('No changes were saved. Profile updates will be available when the backend is connected. Your edits are still here.');
+    const request = ++saveRequestRef.current;
+    savingRef.current = true;
+    setSaving(true);
+    try {
+      await onSave({
+        name: values.name.trim(),
+        username: values.username.trim(),
+        bio: values.bio,
+        location: values.location,
+        avatarFile: imageFilesRef.current.photo,
+        bannerFile: imageFilesRef.current.banner,
+        avatarUrl: removedImagesRef.current.photo ? '' : profile.avatarUrl,
+        bannerUrl: removedImagesRef.current.banner ? '' : profile.bannerUrl,
+      });
+      if (!closedRef.current && request === saveRequestRef.current) handleClose();
+    } catch (error) {
+      if (!closedRef.current && request === saveRequestRef.current) {
+        setNotice(`Could not save your profile. ${error instanceof Error && error.message ? `${error.message} ` : ''}Please try saving again.`);
+      }
+    } finally {
+      if (!closedRef.current && request === saveRequestRef.current) {
+        savingRef.current = false;
+        setSaving(false);
+      }
+    }
   }
 
   return (
@@ -104,7 +172,7 @@ export default function EditProfileModal({ profile, onClose }) {
         <h2 id={`${formId}-title`}>Edit Profile</h2>
         <p id={`${formId}-description`}>Update your profile details.</p>
       </header>
-      <form className="edit-profile-form" onSubmit={handleSubmit} noValidate>
+      <form className="edit-profile-form" onSubmit={handleSubmit} aria-busy={saving} noValidate>
         <div className="edit-profile-media">
           <div className="profile-cover edit-profile-banner">
             {imagePreviews.banner ? <img src={imagePreviews.banner} alt="Profile banner preview" /> : (
@@ -118,6 +186,7 @@ export default function EditProfileModal({ profile, onClose }) {
               type="button"
               aria-label="Change profile banner"
               aria-describedby={`${formId}-image-hint${imageErrors.banner ? ` ${formId}-banner-error` : ''}`}
+              disabled={saving}
               onClick={() => imageInputsRef.current.banner.click()}
             >
               <span className="edit-profile-image-overlay" aria-hidden="true">
@@ -127,12 +196,13 @@ export default function EditProfileModal({ profile, onClose }) {
             </button>
           </div>
           <div className="edit-profile-photo">
-            <Avatar initials={initials} src={imagePreviews.photo || profile.avatarUrl} accent />
+            <Avatar initials={initials} src={imagePreviews.photo} accent />
             <button
               className="edit-profile-image-button"
               type="button"
               aria-label="Change profile photo"
               aria-describedby={`${formId}-image-hint${imageErrors.photo ? ` ${formId}-photo-error` : ''}`}
+              disabled={saving}
               onClick={() => imageInputsRef.current.photo.click()}
             >
               <span className="edit-profile-image-overlay" aria-hidden="true">
@@ -140,9 +210,15 @@ export default function EditProfileModal({ profile, onClose }) {
               </span>
             </button>
           </div>
-          <input ref={node => { imageInputsRef.current.banner = node; }} type="file" name="banner" aria-label="Choose banner image" accept="image/png,image/jpeg,image/webp" onChange={handleImageChange} hidden />
-          <input ref={node => { imageInputsRef.current.photo = node; }} type="file" name="photo" aria-label="Choose profile photo" accept="image/png,image/jpeg,image/webp" onChange={handleImageChange} hidden />
-          <p className="edit-profile-image-hint" id={`${formId}-image-hint`}>Select the banner or photo to change it. PNG, JPG or WebP · local preview only.</p>
+          {(imagePreviews.banner || imagePreviews.photo) && (
+            <div className="edit-profile-remove-images">
+              {imagePreviews.banner && <button type="button" disabled={saving} onClick={() => handleRemoveImage('banner')}>Remove banner</button>}
+              {imagePreviews.photo && <button type="button" disabled={saving} onClick={() => handleRemoveImage('photo')}>Remove photo</button>}
+            </div>
+          )}
+          <input ref={node => { imageInputsRef.current.banner = node; }} type="file" name="banner" aria-label="Choose banner image" accept="image/png,image/jpeg,image/webp" onChange={handleImageChange} disabled={saving} hidden />
+          <input ref={node => { imageInputsRef.current.photo = node; }} type="file" name="photo" aria-label="Choose profile photo" accept="image/png,image/jpeg,image/webp" onChange={handleImageChange} disabled={saving} hidden />
+          <p className="edit-profile-image-hint" id={`${formId}-image-hint`}>Select the banner or photo to change it. PNG/JPG/WebP · up to 10 MB</p>
           {imageErrors.banner && <p className="edit-profile-error" id={`${formId}-banner-error`} role="alert">Banner: {imageErrors.banner}</p>}
           {imageErrors.photo && <p className="edit-profile-error" id={`${formId}-photo-error`} role="alert">Photo: {imageErrors.photo}</p>}
         </div>
@@ -156,6 +232,7 @@ export default function EditProfileModal({ profile, onClose }) {
             required
             value={values.name}
             onChange={handleChange}
+            disabled={saving}
             aria-invalid={Boolean(errors.name)}
             aria-describedby={errors.name ? `${formId}-name-error` : undefined}
           />
@@ -175,6 +252,7 @@ export default function EditProfileModal({ profile, onClose }) {
               required
               value={values.username}
               onChange={handleChange}
+              disabled={saving}
               aria-invalid={Boolean(errors.username)}
               aria-describedby={errors.username ? `${formId}-username-error` : undefined}
             />
@@ -183,17 +261,16 @@ export default function EditProfileModal({ profile, onClose }) {
         </div>
         <div className="edit-profile-field">
           <label htmlFor={`${formId}-bio`}>Bio <span>(optional)</span></label>
-          <textarea id={`${formId}-bio`} name="bio" rows={4} value={values.bio} onChange={handleChange} />
+          <textarea id={`${formId}-bio`} name="bio" rows={4} value={values.bio} onChange={handleChange} disabled={saving} />
         </div>
         <div className="edit-profile-field">
           <label htmlFor={`${formId}-location`}>Location <span>(optional)</span></label>
-          <input id={`${formId}-location`} name="location" type="text" placeholder="City, country" value={values.location} onChange={handleChange} />
+          <input id={`${formId}-location`} name="location" type="text" placeholder="City, country" value={values.location} onChange={handleChange} disabled={saving} />
         </div>
-        <p className="edit-profile-pending">Design preview · saving is not connected yet.</p>
-        <div className="edit-profile-notice" role="status">{notice}</div>
+        <div className="edit-profile-notice" role="status">{notice || (saving ? 'Saving your profile…' : pendingImages.banner || pendingImages.photo ? 'Checking your image…' : '')}</div>
         <footer className="edit-profile-actions">
           <button className="edit-profile-secondary" type="button" onClick={handleClose}>Cancel</button>
-          <button className="edit-profile-submit" type="submit">Save Changes</button>
+          <button className="edit-profile-submit" type="submit" disabled={saving || pendingImages.banner || pendingImages.photo}>{saving ? 'Saving…' : 'Save Changes'}</button>
         </footer>
       </form>
     </dialog>

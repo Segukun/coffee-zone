@@ -22,8 +22,12 @@ export default function ProfileHeader({ profile, postsCount, onEdit }) {
       </header>
       <section className="profile-overview" aria-labelledby={nameId}>
         <div className="profile-cover">
-          <p>// always learning</p>
-          <span>A coffee. An idea. A new commit.</span>
+          {profile.bannerUrl ? <img className="profile-cover-image" src={profile.bannerUrl} alt="Profile banner" /> : (
+            <>
+              <p>// always learning</p>
+              <span>A coffee. An idea. A new commit.</span>
+            </>
+          )}
         </div>
         <div className="profile-details">
           <div className="profile-toolbar">

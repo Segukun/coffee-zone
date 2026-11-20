@@ -3,6 +3,7 @@ import { IoHomeOutline, IoSettingsOutline } from 'react-icons/io5';
 import { CgProfile } from 'react-icons/cg';
 import Avatar from '../common/Avatar.jsx';
 import BrandLogo from '../common/BrandLogo.jsx';
+import useData from '../../hooks/useData.js';
 
 const navigationItems = [
   { to: '/', label: 'Home', icon: IoHomeOutline },
@@ -11,6 +12,9 @@ const navigationItems = [
 ];
 
 export default function Sidebar() {
+  const { profile } = useData();
+  const initials = profile.name.trim().split(/\s+/).slice(0, 2).map(part => part[0]).join('').toUpperCase();
+
   return (
     <aside className="sidebar" aria-label="Main sidebar">
       <Link className="sidebar-brand" to="/" aria-label="Coffee Zone · Home"><BrandLogo /></Link>
@@ -23,10 +27,10 @@ export default function Sidebar() {
         ))}
       </nav>
       <div className="sidebar-bottom">
-        <div className="user-placeholder">
-          <Avatar initials="CZ" accent />
-          <div><strong>Your space</strong><span>User · coming soon</span></div>
-        </div>
+        <Link className="user-placeholder" to="/profile" aria-label="Your local profile">
+          <Avatar initials={initials} src={profile.avatarUrl} accent />
+          <div><strong>{profile.name}</strong><span>@{profile.username}</span></div>
+        </Link>
         <p className="sidebar-copyright">Coffee Zone © 2026</p>
       </div>
     </aside>

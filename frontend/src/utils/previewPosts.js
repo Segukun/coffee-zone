@@ -1,4 +1,5 @@
 export const previewProfile = {
+  id: 'user-alex',
   name: 'Alex Morgan',
   username: 'alexcodes',
   avatarAccent: true,

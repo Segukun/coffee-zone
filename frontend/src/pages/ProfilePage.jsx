@@ -2,24 +2,37 @@ import { useState } from 'react';
 import EditProfileModal from '../components/profile/EditProfileModal.jsx';
 import ProfileHeader from '../components/profile/ProfileHeader.jsx';
 import PostCard from '../components/posts/PostCard.jsx';
-import { previewProfile, profilePosts } from '../utils/previewPosts.js';
+import useData from '../hooks/useData.js';
 
 export default function ProfilePage() {
+  const { profile, posts, services } = useData();
   const [isEditing, setIsEditing] = useState(false);
+  const [activeTab, setActiveTab] = useState('posts');
+  const ownPosts = posts.filter(post => post.author.id === profile.id);
+  const replies = [];
+  function collectReplies(items, postId) {
+    for (const item of items) {
+      if (item.author.id === profile.id) replies.push({ comment: item, postId });
+      collectReplies(item.comments ?? [], postId);
+    }
+  }
+  for (const post of posts) collectReplies(post.comments ?? [], post.id);
 
   return (
     <>
-      <ProfileHeader profile={previewProfile} postsCount={profilePosts.length} onEdit={() => setIsEditing(true)} />
-      {isEditing && <EditProfileModal profile={previewProfile} onClose={() => setIsEditing(false)} />}
-      <section className="profile-posts" aria-labelledby="profile-posts-heading">
+      <ProfileHeader profile={profile} postsCount={ownPosts.length} onEdit={() => setIsEditing(true)} />
+      {isEditing && <EditProfileModal profile={profile} onSave={services.updateProfile} onClose={() => setIsEditing(false)} />}
+      <section className="profile-posts" aria-label={activeTab === 'posts' ? 'Your posts' : 'Your replies'}>
         <header className="profile-posts-header">
-          <h2 id="profile-posts-heading"><span>Posts</span></h2>
-          <button type="button" title="Replies are not available in this preview." disabled>Replies</button>
+          <button type="button" aria-pressed={activeTab === 'posts'} onClick={() => setActiveTab('posts')}>Posts</button>
+          <button type="button" aria-pressed={activeTab === 'replies'} onClick={() => setActiveTab('replies')}>Replies</button>
         </header>
         <ul className="post-list">
-          {profilePosts.map(post => <li key={post.id}><PostCard post={post} /></li>)}
+          {activeTab === 'posts' ? ownPosts.map(post => <li key={post.id}><PostCard post={post} /></li>) : replies.map(({ comment, postId }) => (
+            <li key={comment.id}><PostCard post={comment} isComment threadPath={`/posts/${postId}/comments/${comment.id}`} /></li>
+          ))}
         </ul>
-        <p className="profile-preview-note">Example profile · explore the comments. Saving and likes are not connected yet.</p>
+        {(activeTab === 'posts' ? ownPosts.length : replies.length) === 0 && <p className="profile-preview-note">{activeTab === 'posts' ? 'No posts yet. Share something from Home.' : 'No replies yet. Join a conversation.'}</p>}
       </section>
     </>
   );
