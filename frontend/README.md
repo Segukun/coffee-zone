@@ -45,9 +45,110 @@ La configuración para la futura API sigue disponible en .env.example:
 VITE_API_URL=http://localhost:3000/api
 ~~~
 
-Se puede copiar .env.example a .env (PowerShell: Copy-Item .env.example .env). src/services/api.js exporta apiBaseUrl, lee VITE_API_URL y quita las barras finales; todavía no envía solicitudes y no es utilizado por los servicios locales. Reiniciar Vite al cambiar .env.
+Para un entorno nuevo, copiar .env.example a .env (PowerShell: Copy-Item .env.example .env); conservar el archivo local si ya existe. `src/services/apiConfig.js` lee `import.meta.env.VITE_API_URL`, valida una URL absoluta HTTP/HTTPS sin credenciales, query ni fragmento, y normaliza sus barras. Si la variable no está definida, utiliza `http://localhost:3000/api`; un valor explícito vacío o inválido genera `INVALID_API_URL`. Configurar la URL del backend correspondiente antes de compilar para otro entorno. Reiniciar Vite al cambiar .env. `src/services/api.js` conserva el export `apiBaseUrl` por compatibilidad.
 
 Las variables VITE_* son públicas: no incluir secretos, tokens privados ni credenciales de MongoDB. .env y sus variantes están ignorados; .env.example sí se versiona.
+
+## Cliente HTTP y servicios de API
+
+La infraestructura HTTP está preparada para la futura integración. Ninguna pantalla, formulario ni servicio de datos locales la invoca todavía. No se necesita Axios ni otra dependencia: se utilizan `fetch`, `Headers`, `URL` y `AbortController` nativos.
+
+| Archivo en `src/services/` | Responsabilidad |
+| --- | --- |
+| `apiConfig.js` | URL base desde Vite, normalización y construcción de URLs/query. |
+| `apiClient.js` | Singleton `api` exportado por defecto y fábrica `createApiClient`; métodos GET, POST, PUT, PATCH y DELETE; JSON, JWT, cancelación y errores centralizados. |
+| `ApiError.js` | Error común con `status`, `code`, `message`, `details` opcionales y `retryAfter`. |
+| `authApi.js` | `register(data, options)` y `login(data, options)`, públicos, mediante POST. |
+| `usersApi.js` | `getMe(options)`, `updateMe(data, options)` y `changePassword(data, options)` privados; `getPublicProfile(username, options)` público. |
+| `api.js` | Exports compatibles de configuración y acceso a `api`, `createApiClient` y `ApiError`. |
+| `localData.js` | Servicios locales actuales, sin cambios ni conexión HTTP. |
+
+### Solicitudes y respuestas
+
+```js
+import api from './services/apiClient.js'; // Ajustar la ruta relativa al módulo consumidor.
+
+const health = await api.get('/health');
+const login = await api.post('/auth/login', { email, password });
+// Se conserva el JSON completo: login.data.token y login.data.user.
+```
+
+Todos los métodos devuelven **el contenido JSON completo**, sin extraer automáticamente `data` ni eliminar propiedades adicionales. Las respuestas vacías (incluidos 204 y 205) devuelven `null`. GET y DELETE reciben `(path, options)` y no llevan body; POST, PUT y PATCH reciben `(path, data, options)`. `data` se serializa como JSON y añade `Content-Type: application/json`; si se omite, no envía ese header. `Accept` siempre es `application/json`. `FormData` conserva el body y deja que fetch establezca su Content-Type con el boundary; no se implementa un endpoint de subida.
+
+Los paths son relativos a la base: usar `/users/me`, no `/api/users/me` ni una URL absoluta. Los prefijos repetidos, URLs externas y segmentos `..` se rechazan con `INVALID_REQUEST`. Para parámetros de ruta variables usar `encodeURIComponent`; `usersApi.getPublicProfile` ya lo hace. Las opciones admitidas son `{ query, headers, auth, signal }`. Query acepta un objeto de valores string/número/booleano, arrays como claves repetidas o `URLSearchParams`; omite null/undefined y conserva false/0. Se añaden headers propios sin modificar los originales. No escribir query o fragmentos dentro del path: usar `query`.
+
+Ejemplo de opciones: `api.get('/health', { headers: { 'X-Request-ID': requestId } })`. El soporte genérico de query, PUT y DELETE prepara el transporte: los seis endpoints actuales no definen filtros query y usan únicamente GET, POST y PATCH. El backend tampoco habilita PUT/DELETE en CORS actualmente. No hay servicios de posts, likes o comentarios remotos.
+
+### JWT y servicios específicos
+
+```js
+import api from './services/apiClient.js';
+import authApi from './services/authApi.js';
+import usersApi from './services/usersApi.js';
+
+// Conectar una vez desde la futura capa de autenticación.
+// readCurrentToken debe devolver el token actual o null; puede ser asíncrona.
+api.setTokenProvider(readCurrentToken);
+
+const result = await authApi.login({ email, password });
+// La futura capa de sesión decide qué hacer con result.data.token.
+const profile = await usersApi.getMe();
+const updated = await usersApi.updateMe({ bio: 'Software developer' });
+```
+
+Antes de `getMe`, la futura capa de sesión debe hacer que el proveedor devuelva el token obtenido. El cliente consulta al proveedor en cada solicitud con `auth: true` y construye `Authorization: Bearer <token>`. También se puede usar `api.get('/users/me', { auth: true })`. Los métodos privados de `usersApi` fuerzan esa opción; registro, login y consulta pública fuerzan `auth: false`, aunque el consumidor indique otra cosa. No pasar Authorization manualmente en `headers`.
+
+Una solicitud privada sin token falla localmente con `AUTH_TOKEN_MISSING`, `status: null` y sin llamar al servidor. Si el proveedor falla o devuelve un token con espacios internos, se usa `AUTH_TOKEN_UNAVAILABLE`. `api.setTokenProvider(() => null)` desconecta el proveedor. Para una instancia independiente, `createApiClient({ baseUrl, getToken })`; las fábricas `createAuthApi(client)` y `createUsersApi(client)` permiten asociarle servicios.
+
+El cliente no guarda tokens, no accede a localStorage, no genera JWT, no renueva sesiones ni cierra sesión ante un 401. No envía cookies y rechaza redirects HTTP para evitar reenviar solicitudes con credenciales fuera del destino configurado. No imprime headers, tokens, cuerpos ni errores de transporte en consola.
+
+Al conectar Login, implementar estado de sesión/proveedor, carga, errores y navegación usando `result.data.token` y `result.data.user`. Sign Up utilizará `authApi.register`, mostrará validaciones/duplicados y deberá hacer login por separado: el registro no emite token. Profile utilizará `getMe`, `getPublicProfile` y `updateMe`, adaptando campos al [contrato real](../backend/docs/users-api.md): el perfil público no incluye email, la edición permite solo name/username/bio/avatar y no recibe archivos, banner ni ubicación. `changePassword` recibe exactamente currentPassword/newPassword; no invalida los JWT ya emitidos. Ninguno de estos flujos está conectado en esta tarjeta.
+
+### Errores, reintentos y cancelación
+
+```js
+import { ApiError } from './services/ApiError.js';
+
+const controller = new AbortController();
+try {
+  const health = await api.get('/health', { signal: controller.signal });
+  // Usar health.data.status.
+} catch (error) {
+  if (error.name !== 'AbortError' && error instanceof ApiError) {
+    // Mostrar error.message; asociar error.details a los campos cuando existan.
+    // Para 429, error.retryAfter indica los segundos antes de volver a intentar.
+  }
+}
+// Llamar controller.abort() al cancelar o desmontar el consumidor.
+```
+
+| Situación | Resultado |
+| --- | --- |
+| HTTP 4xx | `ApiError` conserva status y código del backend, y su mensaje cuando es seguro. `details` conserva únicamente field/message válidos. Incluye 400, 401, 403, 404, 409, 413, 415, 429 y otros estados. |
+| HTTP 5xx | Conserva status/código seguro; utiliza mensaje genérico y omite detalles técnicos. |
+| HTTP sin envelope de error o HTML de proxy | Conserva el estado observado, con `HTTP_ERROR` y mensaje seguro; no expone contenido crudo. |
+| 429 / Retry-After | `retryAfter` expresa segundos, admite número o fecha HTTP y vale `null` si falta o es inválido. El backend expone este header mediante CORS. |
+| Fetch rechaza sin respuesta | `NETWORK_ERROR`, `status: null`; no se inventa HTTP 500. El navegador no permite distinguir de manera fiable backend caído, red y bloqueo CORS: comprobar Network/CORS y disponibilidad del servidor. |
+| Respuesta exitosa no JSON | `INVALID_RESPONSE` con el status observado. |
+| JSON malformado | `INVALID_JSON_RESPONSE` con el status observado. |
+| Fallo al leer el body | `RESPONSE_READ_ERROR` con el status observado. |
+| Cancelación | `DOMException` con `name: 'AbortError'`, sin exponer el motivo original; manejarla sin mostrar un error al usuario. |
+
+No se adjuntan causas, requests, responses, URLs o cuerpos crudos a `ApiError`. Se filtran valores de token/contraseñas enviados y patrones técnicos sensibles de mensajes y detalles. Los errores de configuración/entrada también usan `ApiError` con status null. El consumidor debe mirar `code` además de status: un 401 de login (`INVALID_CREDENTIALS`) o de contraseña actual (`INVALID_CURRENT_PASSWORD`) no equivale necesariamente a una sesión vencida.
+
+No hay reintentos automáticos ni deduplicación de solicitudes: cada llamada explícita produce como máximo un intento de fetch. Los consumidores futuros deben coordinar carga/cancelación y evitar dobles envíos; las URLs, headers y tratamiento HTTP no se duplican en componentes.
+
+### Pruebas del transporte
+
+Desde `frontend/`:
+
+```sh
+npm test
+npm run lint
+npm run build
+```
+
+Se utiliza `node:test` de Node 24, sin nuevas dependencias. `test/apiClient.test.js` usa fetch simulado y respuestas nativas para métodos/JSON/FormData, autenticación, errores, Retry-After y AbortSignal. `test/apiConfig.test.js` comprueba normalización, query y paths; también utiliza Vite para verificar realmente `import.meta.env.VITE_API_URL`, deshabilitando la lectura de `.env`. `test/apiServices.test.js` verifica los seis contratos mediante fetch simulado. Las pruebas no crean usuarios, no usan MongoDB ni realizan solicitudes de red. Pueden requerir permiso para iniciar el subproceso local de Vite; no prueban el comportamiento CORS de un navegador real.
 
 ## Organización
 
@@ -68,7 +169,7 @@ src/
 ├── pages/               # Home, Profile, Settings, Thread, Login,
 │                        # Register y NotFound
 ├── routes/AppRouter.jsx
-├── services/            # localData.js y configuración api.js
+├── services/            # Cliente HTTP, configuración, authApi/usersApi y localData.js
 ├── utils/               # previewPosts.js y authValidation.js
 ├── styles/              # variables.css, global.css y layout.css
 ├── App.jsx

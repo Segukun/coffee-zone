@@ -1,2 +1,4 @@
-// Public configuration only. Add shared HTTP transport when API integration begins.
-export const apiBaseUrl = (import.meta.env.VITE_API_URL || 'http://localhost:3000/api').replace(/\/+$/, '');
+// Keep the existing configuration export available to future callers.
+export { apiBaseUrl } from './apiConfig.js';
+export { default as api, createApiClient } from './apiClient.js';
+export { ApiError } from './ApiError.js';

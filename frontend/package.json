@@ -11,6 +11,7 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint . --max-warnings 0",
+    "test": "node --test",
     "preview": "vite preview"
   },
   "dependencies": {
